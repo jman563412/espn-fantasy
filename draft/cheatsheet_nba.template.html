@@ -1,0 +1,390 @@
+<title>NBA Draft Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky draft clock bar; board table on the left, "on the clock" + my roster panel on the right (stacks first on phones). */
+:root {
+  --bg: #eef1f4; --panel: #ffffff; --ink: #15202a; --muted: #5d6c79; --line: #d6dde4; --soft: #e6ebf0;
+  --accent: #b5501d; --accent-ink: #ffffff; --mine: #1d6b58; --mine-soft: #dcefe9;
+  --warn: #9a6200; --warn-soft: #fbefd6; --bad: #b3261e; --bad-soft: #f8e1df;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e141a; --panel: #151e27; --ink: #e5ecf2; --muted: #93a2b0; --line: #26323d; --soft: #1b2631;
+  --accent: #e5793f; --accent-ink: #1a0d05; --mine: #56b89f; --mine-soft: #173a32;
+  --warn: #e3a743; --warn-soft: #3a2d12; --bad: #f0796d; --bad-soft: #3d1c19; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e141a; --panel: #151e27; --ink: #e5ecf2; --muted: #93a2b0; --line: #26323d; --soft: #1b2631;
+  --accent: #e5793f; --accent-ink: #1a0d05; --mine: #56b89f; --mine-soft: #173a32;
+  --warn: #e3a743; --warn-soft: #3a2d12; --bad: #f0796d; --bad-soft: #3d1c19; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--panel) }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+button, input, select { font: inherit; color: inherit }
+button { cursor: pointer }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+header.clock { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+.clock .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding-block: 10px; }
+h1 { font: 700 26px/1 var(--display); letter-spacing: .01em; margin: 0; text-transform: uppercase; }
+h1 small { font: 500 12px var(--body); color: var(--muted); text-transform: none; letter-spacing: 0; margin-left: 8px }
+.pickline { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.pick-now { font: 700 22px/1 var(--display); }
+.pick-now b { color: var(--accent) }
+.oc { font: 700 13px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; border-radius: 3px; background: var(--soft); color: var(--muted); }
+.oc.live { background: var(--accent); color: var(--accent-ink); }
+.tools { display: flex; gap: 8px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+.tools label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px }
+select, .btn { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; }
+.btn:hover { border-color: var(--muted) }
+.btn.danger { color: var(--bad) }
+.btn.danger.armed { background: var(--bad); color: var(--panel); border-color: var(--bad) }
+
+main.wrap { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; padding-block: 16px 40px; align-items: start; }
+@media (max-width: 900px) { main.wrap { grid-template-columns: minmax(0, 1fr); } aside { order: -1 } }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.search { flex: 1 1 220px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 7px 10px; }
+.chips { display: flex; gap: 4px; flex-wrap: wrap }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 11px; font: 600 13px var(--display); letter-spacing: .05em; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.hint { color: var(--muted); font-size: 12px; margin: 0 0 10px }
+kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; background: var(--panel) }
+
+.board { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-variant-numeric: tabular-nums; }
+th { position: sticky; top: 0; background: var(--panel); text-align: right; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap }
+th.l, td.l { text-align: left }
+td { padding: 6px 8px; border-bottom: 1px solid var(--soft); text-align: right; vertical-align: top; }
+td.num { font-family: var(--mono); font-size: 13px }
+td.rk { color: var(--muted); font-family: var(--mono); font-size: 12px; width: 36px }
+.nm { font-weight: 600 }
+.meta { color: var(--muted); font-size: 12px; font-family: var(--mono) }
+.note { color: var(--muted); font-size: 12px; font-style: italic; margin-top: 1px; max-width: 46ch }
+tr.tier td { background: var(--soft); color: var(--muted); font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; padding: 4px 8px; text-align: left; border-bottom: 0 }
+tr.taken td { opacity: .38 }
+tr.taken .nm { text-decoration: line-through }
+tr.mine td { background: var(--mine-soft) }
+tr.sugg td:first-child { box-shadow: inset 3px 0 0 var(--accent) }
+.tag { display: inline-block; font: 600 11px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 3px 5px; border-radius: 3px; margin-left: 4px; vertical-align: 1px }
+.tag.out { background: var(--bad-soft); color: var(--bad) }
+.tag.dtd { background: var(--warn-soft); color: var(--warn) }
+.tag.val { background: var(--mine-soft); color: var(--mine) }
+.tag.last { background: var(--soft); color: var(--muted) }
+.act { white-space: nowrap }
+.act button { border: 1px solid var(--line); background: var(--panel); border-radius: 3px; padding: 2px 7px; font-size: 12px }
+.act button.mine-b { color: var(--mine); border-color: var(--mine) }
+.act button.on { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+
+aside { display: flex; flex-direction: column; gap: 14px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 70px); }
+@media (max-width: 900px) { aside { position: static } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; min-width: 0 }
+.card h2 { font: 700 15px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 10px; color: var(--muted) }
+.sugg-main { font: 700 26px/1.05 var(--display); }
+.sugg-main span { color: var(--muted); font: 500 13px var(--mono); margin-left: 6px }
+.why { color: var(--muted); font-size: 13px; margin: 6px 0 10px }
+.alts { display: grid; gap: 4px; font-size: 13px }
+.alts div { display: flex; justify-content: space-between; gap: 8px }
+.alts span:last-child { color: var(--muted); font-family: var(--mono); font-size: 12px }
+.slots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 10px }
+.slot { border: 1px dashed var(--line); border-radius: 4px; padding: 5px 4px; text-align: center; min-width: 0 }
+.slot b { display: block; font: 700 12px var(--display); letter-spacing: .08em; color: var(--muted) }
+.slot i { display: block; font-style: normal; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.slot.full { border-style: solid; border-color: var(--mine); background: var(--mine-soft) }
+.checks { display: grid; gap: 4px; font-size: 13px; margin: 0; padding: 0; list-style: none }
+.checks li { display: flex; gap: 8px; align-items: baseline }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--mine); transform: translateY(-1px) }
+.dot.warn { background: var(--warn) } .dot.bad { background: var(--bad) }
+.roster { margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; display: grid; gap: 2px }
+.roster li { display: flex; justify-content: space-between; gap: 8px }
+.roster li span:last-child { color: var(--muted); font-family: var(--mono); font-size: 12px }
+details.card summary { cursor: pointer; font: 700 15px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted) }
+details.card ul { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px }
+.empty { color: var(--muted); font-size: 13px }
+footer.wrap { color: var(--muted); font-size: 12px; padding-block: 0 24px }
+@media (prefers-reduced-motion: no-preference) { tr { transition: opacity .15s } }
+</style>
+
+<header class="clock">
+  <div class="wrap">
+    <h1>NBA Draft Board <small id="gen"></small></h1>
+    <div class="pickline" aria-live="polite">
+      <span class="pick-now" id="picknow"></span>
+      <span class="oc" id="oc"></span>
+    </div>
+    <div class="tools">
+      <label for="teams" title="Number of teams in the draft. Defaults to the league's size when the board was built.">Teams
+        <select id="teams"></select>
+      </label>
+      <label for="slot">My draft slot
+        <select id="slot"></select>
+      </label>
+      <label for="wait" title="When to pass on the top player because he'll still be there at your next pick. Players are always ranked by this board's value.">Wait rule
+        <select id="wait">
+          <option value="espn">ESPN rank (casual league)</option>
+          <option value="adp">ADP (experienced league)</option>
+          <option value="off">Off (never wait)</option>
+        </select>
+      </label>
+      <button class="btn" id="other" title="Someone took a player who isn't on this board">+ Unlisted pick</button>
+      <button class="btn" id="undo">Undo</button>
+      <button class="btn danger" id="reset">Reset</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section style="min-width:0">
+    <div class="filters">
+      <input class="search" id="q" type="search" placeholder="Find a player…" autocomplete="off" aria-label="Find a player">
+      <div class="chips" id="pos" role="group" aria-label="Position filter"></div>
+      <label class="hint" style="margin:0;display:flex;gap:6px;align-items:center"><input type="checkbox" id="hide"> Hide drafted</label>
+    </div>
+    <p class="hint">As picks happen: type a name, then <kbd>Enter</kbd> = taken by someone else, <kbd>Shift</kbd>+<kbd>Enter</kbd> = mine. Or use the row buttons.
+      “Lasts” = the wait rule says he should still be there at your next pick.</p>
+    <div class="board"><table>
+      <thead><tr><th>#</th><th class="l">Player</th><th>PPG</th><th>G</th><th>Value</th><th>ESPN</th><th>ADP</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2 id="sugg-h">Suggested pick</h2>
+      <div id="sugg"></div>
+    </div>
+    <div class="card">
+      <h2>My team</h2>
+      <div class="slots" id="slots"></div>
+      <ul class="checks" id="checks"></ul>
+      <ul class="roster" id="roster"></ul>
+    </div>
+    <details class="card" open>
+      <summary>Strategy (researched Oct 18)</summary>
+      <ul>
+        <li><b>Centers:</b> only Jokic and Wembanyama are worth a reach, with Sabonis alone in the next tier. After him, ESPN's center tiers (Sengun/Towns, Duren/Davis/Adebayo, Allen/Reid/Okongwu) are close, so you can wait. Still get a second C-eligible player by the middle rounds: good centers run out first, so the centers left late are much weaker than the guards and forwards left (the 20th-best C projects about 34 points a game, vs 36–38 at other positions).</li>
+        <li><b>Point guard is the deepest position.</b> Don't reach for one. Small forward goes fast at the top (Barnes, Amen Thompson, Flagg), then deep in the middle.</li>
+        <li><b>Games played count.</b> In H2H points every game is points, so a 45-ppg player who misses 25 games is worth less than a 40-ppg player who plays all 82. Value here is season points over a replacement player. Early on a missed game counts as zero: your first picks have to play. The injury penalty eases off round by round, so by the last rounds a fragile star who scores a lot when healthy is the upside pick (the board re-sorts for the round of your next pick).</li>
+        <li><b>One injured stash max:</b> there's one IR slot. While he's out a free agent fills in, so his value here counts only the games after ESPN's estimated return. At most two injury-prone players in all (missed 40%+ of games over three seasons, or out 30+ days): one in IR, one on the bench, so you never have to drop someone to make room.</li>
+        <li><b>Durability counts:</b> projected games blend ESPN with the last three seasons of games played, and players who miss a lot of time take a risk discount. Fragile stars still show up when they slide far enough, just later.</li>
+        <li><b>Two-position players</b> get a small bonus: daily lineups are easier to fill. A tiebreaker, not a reason to reach.</li>
+        <li><b>Late-round values:</b> Kessler, Kel'el Ware, Quickley, Podziemski, Jaquez Jr., Gui Santos.</li>
+        <li><b>Daily lineups:</b> lineups lock at each tip-off. Streaming players with more games that week wins matchups.</li>
+      </ul>
+    </details>
+  </aside>
+</main>
+<footer class="wrap" id="foot"></footer>
+
+<script>
+const D = __DATA__;
+let T = D.teams; // changeable from the Teams dropdown (e.g. the league drops an empty team after the board was built)
+const R = D.rounds, STARTERS = D.starters, IR = D.ir ?? 1;
+const DEPTH = [...STARTERS.filter(s => s !== 11), 0, 1, 2, 3, 4];
+const SLOTNAME = { 0: 'PG', 1: 'SG', 2: 'SF', 3: 'PF', 4: 'C', 5: 'G', 6: 'F', 11: 'UTIL' };
+const OUT = ['OUT', 'INJURY_RESERVE', 'SUSPENSION'];
+const byId = new Map(D.players.map((p, i) => { p.rank = i + 1; return [p.id, p]; }));
+const KEY = 'nba-draft-board-v1';
+let st = { slot: 5, marks: [] };
+try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.marks)) st = s; } catch (e) {}
+if (!st.wait) st.wait = D.wait || 'espn'; // the league's default unless this browser picked one
+// a Teams choice only sticks while the board is still built for the same league size
+if (st.teams && st.teamsBase === D.teams) T = st.teams; else { delete st.teams; delete st.teamsBase; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} };
+let pos = 'ALL';
+
+// Same rules as draftbot.js (okNba / defer), so the suggestion matches what the bot would pick.
+// Wait rule (same as draftbot.js --wait): espn = ESPN rank (casual drafters and autopick follow it), adp = ADP from all
+// ESPN leagues (experienced drafters), off = never wait. Each falls back to the other number if one is missing.
+const surv = c => st.wait === 'off' ? null : st.wait === 'adp' ? c.a || c.e : c.e || c.a;
+const survName = () => st.wait === 'adp' ? 'ESPN ADP' : 'ESPN rank';
+function match(players, slots) {
+  const owner = new Array(slots.length).fill(-1);
+  const place = (i, seen) => {
+    for (let s = 0; s < slots.length; s++) {
+      if (seen[s] || !players[i].s.includes(slots[s])) continue;
+      seen[s] = true;
+      if (owner[s] < 0 || place(owner[s], seen)) { owner[s] = i; return true; }
+    }
+    return false;
+  };
+  players.forEach((_, i) => place(i, []));
+  return owner;
+}
+const filled = (players, slots) => match(players, slots).filter(o => o >= 0).length;
+// Injury cap (same as draftbot.js): at most IR slots + 1 fragile players or long-term stashes, so nobody has to be dropped.
+const STASH_DAYS = 30, FRAGILE_TRACK = 50;
+const isStash = r => OUT.includes(r.i) && (!r.r || Date.parse(r.r) - Date.now() > STASH_DAYS * 864e5);
+const isFragile = r => !isStash(r) && r.tr != null && r.tr < FRAGILE_TRACK;
+function ok(r, mine, round) {
+  const left = R - round, team = [...mine, r];
+  if (OUT.includes(r.i) && mine.some(m => OUT.includes(m.i))) return false;
+  if (team.filter(m => isStash(m) || isFragile(m)).length > IR + 1) return false;
+  return filled(team, STARTERS) + left >= STARTERS.length && filled(team, DEPTH) + left >= DEPTH.length;
+}
+// Wait on someone only if there is a next pick and he'd still fit the roster rules after this one.
+function defer(cands, cur, mine) {
+  const i = (cur - 1) % T, next = cur + 2 * (T - 1 - i) + 1, best = cands[0];
+  if (!best || next > T * R || !surv(best) || surv(best) - 4 <= next) return { list: cands, next };
+  const now = cands.find(c => surv(c) && surv(c) + 4 <= next && c.cv >= 0.85 * best.cv && ok(best, [...mine, c], roundOf(next)));
+  return { list: now ? [now, ...cands.filter(c => c !== now)] : cands, next, deferred: now ? best : null };
+}
+// Same as draftbot.js nbaVal: round 1 counts a missed game as 0 (v), the last round as streamer-covered (vl), linear between.
+const roundW = round => R > 1 ? Math.max(0, (R - round) / (R - 1)) : 1;
+const val = (p, round) => { const w = roundW(round); return w * p.v + (1 - w) * p.vl; };
+const myPicks = () => Array.from({ length: R }, (_, k) => k * T + (k % 2 ? T + 1 - st.slot : st.slot));
+const roundOf = n => Math.ceil(n / T);
+const fmtPick = n => `R${roundOf(n)} · ${n}`;
+
+function render() {
+  const marks = new Map(st.marks.filter(m => m.id).map(m => [m.id, m.who]));
+  const cur = st.marks.length + 1, picks = myPicks();
+  const next = picks.find(n => n >= cur), done = cur > T * R;
+  const mine = st.marks.filter(m => m.who === 'mine' && m.id).map(m => byId.get(m.id));
+  const nextAfter = next ? picks.find(n => n > next) : null;
+
+  document.getElementById('picknow').innerHTML = done ? 'Draft complete' : `Pick <b>${cur}</b> <span class="meta">round ${roundOf(cur)}</span>`;
+  const oc = document.getElementById('oc');
+  oc.className = 'oc' + (next === cur ? ' live' : '');
+  oc.textContent = done ? 'Done' : next === cur ? 'You are on the clock' : next ? `You pick at ${next} · ${next - cur} away` : 'No picks left';
+
+  // value at the round of our next pick: the injury penalty eases off later in the draft, so re-sort by it
+  const vr = roundOf(next || cur), early = roundW(vr) === 1;
+  D.players.forEach(p => { p.cv = Math.round(val(p, vr)); });
+  const list = early ? D.players : [...D.players].sort((a, b) => b.cv - a.cv);
+  list.forEach((p, i) => { p.rank = i + 1; });
+
+  // suggestion, for our next pick
+  const sugg = document.getElementById('sugg');
+  let suggId = null;
+  if (!next || done) { sugg.innerHTML = '<p class="empty">No picks left for you.</p>'; }
+  else {
+    const avail = list.filter(p => !marks.has(p.id));
+    let cands = avail.filter(p => ok(p, mine, roundOf(next)));
+    if (!cands.length) cands = avail;
+    const d = defer(cands, next, mine);
+    const [top, ...rest] = d.list;
+    suggId = top && top.id;
+    document.getElementById('sugg-h').textContent = next === cur ? 'Take now' : `Suggested for pick ${next}`;
+    const why = d.deferred
+      ? `${esc(d.deferred.n)}'s ${survName()} is ${surv(d.deferred)}, so he should still be there at pick ${d.next}. Take ${esc(top.n)} now and come back for him.`
+      : cands === avail && avail.length ? 'No player keeps every slot fillable, so this is the best value left.'
+      : 'Highest value left that keeps every lineup slot fillable.';
+    sugg.innerHTML = top ? `<div class="sugg-main">${esc(top.n)}<span>${top.p} · ${top.ppg.toFixed(1)} ppg</span></div>
+      <p class="why">${why}</p>
+      <div class="alts">${rest.slice(0, 4).map(p => `<div><span>${esc(p.n)}</span><span>${p.p} · ${p.ppg.toFixed(1)}</span></div>`).join('')}</div>` : '<p class="empty">Board is empty.</p>';
+  }
+
+  // my team
+  const owner = match(mine, STARTERS);
+  document.getElementById('slots').innerHTML = STARTERS.map((s, k) => {
+    const p = owner[k] >= 0 ? mine[owner[k]] : null;
+    return `<div class="slot${p ? ' full' : ''}"><b>${SLOTNAME[s]}</b><i>${p ? esc(p.n.split(' ').slice(-1)[0]) : '—'}</i></div>`;
+  }).join('');
+  const nC = mine.filter(p => p.s.includes(4)).length, nOut = mine.filter(p => OUT.includes(p.i)).length, nFragile = mine.filter(m => isStash(m) || isFragile(m)).length;
+  const depth = filled(mine, DEPTH), picksLeft = picks.filter(n => n >= cur).length;
+  const checks = [
+    [mine.length ? (filled(mine, STARTERS) + picksLeft >= STARTERS.length ? '' : 'bad') : '', `Starting slots filled: ${filled(mine, STARTERS)} of ${STARTERS.length}`],
+    [depth + picksLeft >= DEPTH.length ? '' : 'warn', `Depth (a second PG/SG/SF/PF/C): ${depth} of ${DEPTH.length}`],
+    [nC >= 2 || mine.length < 5 ? '' : 'warn', `C-eligible players: ${nC} (aim for 2+)`],
+    [nOut > 1 ? 'bad' : '', `Injured (OUT): ${nOut} of 1 IR slot`],
+    [nFragile > IR + 1 ? 'bad' : nFragile === IR + 1 ? 'warn' : '', `Injury-prone or long-term injured: ${nFragile} of ${IR + 1} max`],
+  ];
+  document.getElementById('checks').innerHTML = checks.map(([c, t]) => `<li><span class="dot ${c}"></span>${t}</li>`).join('');
+  const myMarks = st.marks.map((m, k) => ({ ...m, pick: k + 1 })).filter(m => m.who === 'mine' && m.id);
+  document.getElementById('roster').innerHTML = myMarks.length
+    ? myMarks.map(m => { const p = byId.get(m.id); return `<li><span>${esc(p.n)}</span><span>${p.p} · ${fmtPick(m.pick)}</span></li>`; }).join('')
+    : '<li class="empty">Your picks show up here.</li>';
+
+  // board
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const hide = document.getElementById('hide').checked;
+  const lasts = nextAfter && next === cur ? nextAfter : next;
+  let html = '', lastTier = 0, shown = 0;
+  for (const p of list) {
+    const who = marks.get(p.id);
+    if (q && !p.n.toLowerCase().includes(q)) continue;
+    if (pos !== 'ALL' && !p.p.split('/').includes(pos)) continue;
+    if (hide && who) continue;
+    if (!q && shown >= 220) break;
+    if (early && !q && pos === 'ALL' && p.tier !== lastTier) { html += `<tr class="tier"><td colspan="8">${p.v > 0 ? 'Tier ' + p.tier : 'Depth and streamers'}</td></tr>`; }
+    lastTier = p.tier; shown++;
+    const tags = [];
+    const back = p.r ? ' · back ~' + new Date(p.r + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+    if (OUT.includes(p.i)) tags.push(`<span class="tag out" title="ESPN's estimated return">Out${back}</span>`);
+    else if (p.i === 'DAY_TO_DAY') tags.push(`<span class="tag dtd" title="ESPN's estimated return">DTD${back}</span>`);
+    if (p.e && p.e - p.rank >= 12) tags.push(`<span class="tag val" title="ESPN ranks him ${p.e}">Value</span>`);
+    if (!who && lasts && surv(p) && surv(p) - 4 > lasts) tags.push(`<span class="tag last" title="${survName()} ${surv(p)} vs your pick ${lasts}">Lasts</span>`);
+    html += `<tr class="${who || ''}${p.id === suggId ? ' sugg' : ''}" data-id="${p.id}">
+      <td class="rk">${p.rank}</td>
+      <td class="l"><span class="nm">${esc(p.n)}</span>${tags.join('')}<div class="meta">${p.t} · ${p.p}</div>${p.note ? `<div class="note">${esc(p.note)}</div>` : ''}</td>
+      <td class="num">${p.ppg.toFixed(1)}</td><td class="num">${p.g}</td><td class="num">${p.cv}</td>
+      <td class="num">${p.e || '—'}</td><td class="num">${p.a ? p.a.toFixed(1) : '—'}</td>
+      <td class="act"><button data-act="taken" class="${who === 'taken' ? 'on' : ''}" aria-label="Taken by someone else">Taken</button>
+        <button data-act="mine" class="mine-b${who === 'mine' ? ' on' : ''}" aria-label="My pick">Mine</button></td></tr>`;
+  }
+  document.getElementById('rows').innerHTML = html || '<tr><td colspan="8" class="l empty">No players match.</td></tr>';
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+function toggle(id, who) {
+  const k = st.marks.findIndex(m => m.id === id);
+  if (k >= 0) { const was = st.marks[k].who; st.marks.splice(k, 1); if (was === who) { save(); return render(); } }
+  st.marks.push({ id, who }); save(); render();
+}
+
+document.getElementById('rows').addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  toggle(+b.closest('tr').dataset.id, b.dataset.act);
+});
+const qEl = document.getElementById('q');
+qEl.addEventListener('input', render);
+qEl.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const tr = document.querySelector('#rows tr[data-id]:not(.taken):not(.mine)'); if (!tr) return;
+  toggle(+tr.dataset.id, e.shiftKey ? 'mine' : 'taken'); qEl.value = ''; render();
+});
+document.getElementById('hide').addEventListener('change', render);
+const sel = document.getElementById('slot');
+function fillSlots() {
+  sel.innerHTML = Array.from({ length: T }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
+  if (st.slot > T) st.slot = T;
+  sel.value = st.slot;
+}
+fillSlots();
+sel.addEventListener('change', () => { st.slot = +sel.value; save(); render(); });
+const teamsSel = document.getElementById('teams');
+teamsSel.innerHTML = Array.from({ length: 13 }, (_, i) => `<option value="${i + 4}">${i + 4}</option>`).join('');
+teamsSel.value = T;
+teamsSel.addEventListener('change', () => {
+  T = +teamsSel.value; st.teams = T; st.teamsBase = D.teams;
+  fillSlots(); save(); setGen(); render();
+});
+const waitSel = document.getElementById('wait');
+waitSel.value = st.wait || 'espn';
+waitSel.addEventListener('change', () => { st.wait = waitSel.value; save(); render(); });
+document.getElementById('pos').innerHTML = ['ALL', 'PG', 'SG', 'SF', 'PF', 'C'].map(p => `<button class="chip" data-p="${p}" aria-pressed="${p === pos}">${p === 'ALL' ? 'All' : p}</button>`).join('');
+document.getElementById('pos').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return; pos = b.dataset.p;
+  document.querySelectorAll('#pos .chip').forEach(c => c.setAttribute('aria-pressed', c === b)); render();
+});
+document.getElementById('undo').addEventListener('click', () => { st.marks.pop(); save(); render(); });
+document.getElementById('other').addEventListener('click', () => { st.marks.push({ id: null, who: 'taken' }); save(); render(); });
+let armed = null;
+const rb = document.getElementById('reset');
+rb.addEventListener('click', () => {
+  if (!armed) { rb.classList.add('armed'); rb.textContent = 'Click again to clear'; armed = setTimeout(() => { armed = null; rb.classList.remove('armed'); rb.textContent = 'Reset'; }, 3000); return; }
+  clearTimeout(armed); armed = null; rb.classList.remove('armed'); rb.textContent = 'Reset';
+  st.marks = []; save(); render();
+});
+const setGen = () => { document.getElementById('gen').textContent = `${D.name || 'ESPN default H2H points'} · ${T} teams · ${R} rounds · ranked ${D.generated}`; };
+setGen();
+document.getElementById('foot').textContent = 'PPG and games blend ESPN 2026-27 projections with last season. Value = season fantasy points over a replacement-level player, adjusted for positional scarcity, discounted for players who have missed a lot of games over the last three seasons, with a small bonus for playing two positions. Injured players count only the games after ESPN\'s estimated return (an injured player sits in IR meanwhile). Marks and settings are saved in this browser only.';
+render();
+</script>

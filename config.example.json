@@ -1,0 +1,48 @@
+{
+  "season": {
+    "nfl": 2026,
+    "nba": 2027
+  },
+  "leagues": [
+    {
+      "name": "my-football",
+      "sport": "nfl",
+      "league_id": 0,
+      "team_id": 0,
+      "draft_wait": "espn"
+    },
+    {
+      "name": "my-basketball",
+      "sport": "nba",
+      "league_id": 0,
+      "team_id": 0,
+      "draft_wait": "espn"
+    }
+  ],
+  "rules": {
+    "confirm_writes": true,
+    "ask_draft_wait_before_drafting": true,
+    "go_team_name": "{city} Claude Squad",
+    "nfl": {
+      "close_call_points": 3,
+      "injury_designation_reopens_close_call": true,
+      "ros_positions_for_add_drop": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "streamable_positions": [
+        "QB",
+        "K",
+        "D/ST"
+      ],
+      "keep_streamable_if_ros_beats_fa_per_week": 2,
+      "start_sit_uses_ros": false,
+      "qb_count": "league_majority",
+      "max_qbs": 2
+    },
+    "nba": {
+      "daily_lineups_start_everyone_playing": true
+    }
+  }
+}

@@ -1,0 +1,29 @@
+# secrets and personal state
+cookies.json
+config.json
+chrome-profile/
+NOTES.md
+
+# generated / runtime
+node_modules/
+__pycache__/
+*.pyc
+draft/.profile-copy/
+draft/logs/
+draft/bot.pid
+draft/rankings.json
+draft/rankings-nba.json
+draft/league-nba.json
+draft/cheatsheet-nba.html
+guard_wk*
+*.log
+
+# local scheduler files (generate your own; see README "Scheduling")
+lineup-guard.yml
+drop-watch.yml
+
+# ignore other JSON by default, keep the tracked ones
+*.json
+!package.json
+!package-lock.json
+!config.example.json
